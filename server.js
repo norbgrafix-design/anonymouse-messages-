@@ -3,6 +3,8 @@ const bodyParser = require("body-parser");
 const bcrypt = require("bcrypt");
 const session = require("express-session");
 const sqlite3 = require("sqlite3").verbose();
+const fs = require("fs");
+const path = require("path");
 const app = express();
 
 // Middleware
@@ -59,13 +61,21 @@ app.post("/login", (req, res) => {
 app.get("/user", (req,res) => {
   if(!req.session.userId) return res.redirect("/");
   db.get("SELECT * FROM users WHERE id=?", [req.session.userId], (err,user) => {
-    db.all("SELECT * FROM messages WHERE user_id=?", [user.id], (err,msgs) => {
-      let html = `<h2>Welcome, ${user.username}</h2>`;
-      html += `<p>Share your link: <b>https://yourapp.onrender.com/message/${user.username}</b></p>`;
-      html += "<h3>Messages:</h3>";
-      msgs.forEach(m => html += `<p>${m.message} (${m.timestamp})</p>`);
-      html += `<p><a href='/'>Logout</a></p>`;
-      res.send(html);
+    if(err || !user) return res.redirect("/");
+    const filePath = path.join(__dirname, "public", "user.html");
+    fs.readFile(filePath, "utf8", (err, html) => {
+      if(err) return res.send("Error loading dashboard.");
+      // Replace username placeholder
+      html = html.replace(/USERNAME_HERE/g, user.username);
+      // Fetch messages
+      db.all("SELECT * FROM messages WHERE user_id=?", [user.id], (err,msgs) => {
+        let messagesHtml = "";
+        msgs.forEach(m => {
+          messagesHtml += `<div class="msg">${m.message} (${m.timestamp})</div>`;
+        });
+        html = html.replace("<!-- Messages will appear here -->", messagesHtml);
+        res.send(html);
+      });
     });
   });
 });
